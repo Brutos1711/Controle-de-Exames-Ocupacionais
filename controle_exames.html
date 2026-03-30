@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<title>Controle de Exames v4.1</title>
+<script src="https://cdn.tailwindcss.com"></script>
+</head>
+
+<body class="bg-gray-100 p-6">
+
+<div class="max-w-7xl mx-auto bg-white p-6 rounded-xl shadow space-y-6">
+
+<h1 class="text-2xl font-bold">Controle de Exames Ocupacionais</h1>
+
+<!-- DASHBOARD -->
+<div class="grid grid-cols-3 gap-4 text-center">
+  <div onclick="filtrarStatus('VALIDO')" class="cursor-pointer bg-green-100 p-4 rounded">
+    Válidos: <span id="validos">0</span>
+  </div>
+  <div onclick="filtrarStatus('PROXIMO')" class="cursor-pointer bg-yellow-100 p-4 rounded">
+    Próximos: <span id="proximos">0</span>
+  </div>
+  <div onclick="filtrarStatus('VENCIDO')" class="cursor-pointer bg-red-100 p-4 rounded">
+    Vencidos: <span id="vencidos">0</span>
+  </div>
+</div>
+
+<!-- CONTROLES -->
+<div class="flex gap-2">
+<input id="busca" placeholder="Buscar por nome..." class="border p-2 w-full rounded" oninput="render()">
+
+<input type="file" id="inputBackup" class="hidden" onchange="importarBackup(event)">
+<button onclick="document.getElementById('inputBackup').click()" class="bg-blue-600 text-white px-4 py-2 rounded">
+Restaurar
+</button>
+
+<button onclick="exportarBackup()" class="bg-green-600 text-white px-4 py-2 rounded">
+Backup
+</button>
+
+<button onclick="limparFiltro()" class="bg-gray-500 text-white px-4 py-2 rounded">
+Todos
+</button>
+</div>
+
+<!-- FUNÇÃO -->
+<div class="flex gap-2">
+<input id="novaFuncao" placeholder="Cadastrar função" class="border p-2 rounded w-full">
+<button onclick="addFuncao()" class="bg-purple-600 text-white px-4 rounded">
+Adicionar
+</button>
+</div>
+
+<!-- FORM -->
+<div class="grid grid-cols-2 md:grid-cols-6 gap-3">
+<select id="status" class="border p-2 rounded">
+<option value="ATIVO">ATIVO</option>
+<option value="AFASTADO">AFASTADO</option>
+</select>
+
+<input id="nome" placeholder="Nome" class="border p-2 rounded">
+
+<select id="funcao" class="border p-2 rounded"></select>
+
+<input id="lab" type="date" class="border p-2 rounded">
+<input id="aso" type="date" class="border p-2 rounded">
+
+<button onclick="salvar()" class="bg-blue-600 text-white rounded p-2">
+Salvar
+</button>
+</div>
+
+<!-- TABELA -->
+<table class="w-full text-sm">
+<thead class="bg-gray-200">
+<tr>
+<th>Status</th>
+<th>Nome</th>
+<th>Função</th>
+<th>Laboratório</th>
+<th>ASO</th>
+<th>Status Exames</th>
+<th>Ações</th>
+</tr>
+</thead>
+<tbody id="lista"></tbody>
+</table>
+
+</div>
+
+<script>
+
+let dados = JSON.parse(localStorage.getItem("colaboradores")) || [];
+let funcoes = JSON.parse(localStorage.getItem("funcoes")) || [];
+let editIndex = null;
+let filtroStatus = "";
+
+// STATUS FINAL
+function statusFinal(d){
+    let s1 = calc(d.lab);
+    let s2 = calc(d.aso);
+
+    if(s1 === "VENCIDO" || s2 === "VENCIDO") return "VENCIDO";
+    if(s1 === "PROXIMO" || s2 === "PROXIMO") return "PROXIMO";
+    if(s1 === "VALIDO" || s2 === "VALIDO") return "VALIDO";
+
+    return "-";
+}
+
+// CALC DATA
+function calc(data){
+    if(!data) return "-";
+
+    let hoje = new Date();
+    let d = new Date(data);
+
+    let venc = new Date(d);
+    venc.setFullYear(venc.getFullYear()+1);
+
+    let aviso = new Date(venc);
+    aviso.setMonth(aviso.getMonth()-1);
+
+    if(hoje > venc) return "VENCIDO";
+    if(hoje >= aviso) return "PROXIMO";
+    return "VALIDO";
+}
+
+// SALVAR
+function salvar(){
+    const obj = {
+        statusColaborador: document.getElementById("status").value,
+        nome: document.getElementById("nome").value,
+        funcao: document.getElementById("funcao").value,
+        lab: document.getElementById("lab").value,
+        aso: document.getElementById("aso").value
+    };
+
+    if(editIndex !== null){
+        dados[editIndex] = obj;
+        editIndex = null;
+    } else {
+        dados.push(obj);
+    }
+
+    localStorage.setItem("colaboradores", JSON.stringify(dados));
+    limpar();
+    render();
+}
+// EDITAR
+function editar(i){
+    let d = dados[i];
+    status.value = d.statusColaborador;
+    nome.value = d.nome;
+    funcao.value = d.funcao;
+    lab.value = d.lab;
+    aso.value = d.aso;
+    editIndex = i;
+}
+
+// DELETAR
+function deletar(i){
+    if(confirm("Excluir?")){
+        dados.splice(i,1);
+        localStorage.setItem("colaboradores", JSON.stringify(dados));
+        render();
+    }
+}
+
+// LIMPAR FORM
+function limpar(){
+    status.value = "ATIVO";
+    nome.value = "";
+    lab.value = "";
+    aso.value = "";
+}
+
+// FILTROS
+function filtrarStatus(tipo){
+    filtroStatus = (filtroStatus === tipo) ? "" : tipo;
+    render();
+}
+
+function limparFiltro(){
+    filtroStatus = "";
+    busca.value = "";
+    render();
+}
+
+// RENDER
+function render(){
+
+    let filtroNome = busca.value.toLowerCase();
+
+    lista.innerHTML = "";
+
+    let ordenado = [...dados].sort((a,b)=>a.nome.localeCompare(b.nome));
+
+    ordenado.forEach(d=>{
+
+        if(!d.nome.toLowerCase().includes(filtroNome)) return;
+
+        let final = statusFinal(d);
+        if(filtroStatus && final !== filtroStatus) return;
+
+        let iOriginal = dados.findIndex(x => x === d);
+
+        lista.innerHTML += `
+        <tr class="border-b ${final==='VENCIDO'?'bg-red-50':''}">
+        <td>${d.statusColaborador}</td>
+        <td>${d.nome}</td>
+        <td>${d.funcao || "-"}</td>
+        <td>${formatarBR(d.lab)}</td>
+        <td>${formatarBR(d.aso)}</td>
+        <td class="${final==='VENCIDO'?'text-red-600':final==='PROXIMO'?'text-yellow-600':'text-green-600'} font-bold">${final}</td>
+        <td>
+        <button onclick="editar(${iOriginal})" class="text-blue-600">Editar</button>
+        <button onclick="deletar(${iOriginal})" class="text-red-600 ml-2">Excluir</button>
+        </td>
+        </tr>`;
+    });
+
+    validos.innerText = dados.filter(d=>statusFinal(d)==='VALIDO').length;
+    proximos.innerText = dados.filter(d=>statusFinal(d)==='PROXIMO').length;
+    vencidos.innerText = dados.filter(d=>statusFinal(d)==='VENCIDO').length;
+}
+
+function exportarBackup(){
+    const dadosStr = JSON.stringify(dados);
+    const blob = new Blob([dadosStr], { type: "application/json" });
+
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+
+    a.href = url;
+    a.download = "backup_colaboradores.json";
+    a.click();
+
+    URL.revokeObjectURL(url);
+}
+
+function importarBackup(event){
+    const file = event.target.files[0];
+    if(!file) return;
+
+    const reader = new FileReader();
+
+    reader.onload = function(e){
+        try{
+            const dadosImportados = JSON.parse(e.target.result);
+
+            if(!Array.isArray(dadosImportados)){
+                alert("Arquivo inválido");
+                return;
+            }
+
+            dados = dadosImportados;
+
+            localStorage.setItem("colaboradores", JSON.stringify(dados));
+
+            render();
+
+            alert("Backup restaurado com sucesso!");
+
+        }catch(err){
+            alert("Erro ao importar arquivo");
+        }
+    };
+
+    reader.readAsText(file);
+}
+
+// FUNÇÕES
+function addFuncao(){
+    let f = novaFuncao.value.trim().toUpperCase();
+    if(!f) return;
+
+    if(!funcoes.includes(f)){
+        funcoes.push(f);
+        localStorage.setItem("funcoes", JSON.stringify(funcoes));
+    }
+
+    novaFuncao.value="";
+    carregarFuncoes();
+}
+
+function carregarFuncoes(){
+    funcao.innerHTML="";
+
+    if(funcoes.length === 0){
+        funcao.innerHTML = `<option value="">-- SEM FUNÇÃO --</option>`;
+        return;
+    }
+
+    funcoes.forEach(f=>{
+        funcao.innerHTML += `<option>${f}</option>`;
+    });
+}
+
+// FORMATAR DATA
+function formatarBR(data){
+    if(!data) return "";
+    let [ano, mes, dia] = data.split("-");
+    return `${dia}/${mes}/${ano}`;
+}
+
+// INIT
+carregarFuncoes();
+render();
+
+</script>
+
+</body>
+</html>
