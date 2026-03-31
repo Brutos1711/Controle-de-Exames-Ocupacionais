@@ -325,14 +325,27 @@ async function importarBackup(event){
                 return;
             }
 
+            let total = 0;
+
             for(let item of dadosImportados){
-                delete item.id; // evita conflito
-                await addDoc(collection(db, "colaboradores"), item);
+
+                // 🔥 ADAPTAÇÃO AUTOMÁTICA
+                const obj = {
+                    statusColaborador: item.statusColaborador || "ATIVO",
+                    nome: item.nome || "",
+                    funcao: item.funcao || "",
+                    lab: item.lab || "",
+                    aso: item.aso || ""
+                };
+
+                await addDoc(collection(db, "colaboradores"), obj);
+                total++;
             }
 
-            alert("Backup enviado para o banco!");
+            alert(`✅ ${total} registros importados com sucesso!`);
 
         }catch(err){
+            console.error(err);
             alert("Erro ao importar arquivo");
         }
     };
