@@ -325,11 +325,18 @@ async function importarBackup(event){
                 return;
             }
 
+            if(dadosImportados.length === 0){
+                alert("Backup vazio");
+                return;
+            }
+
+            // 🚨 PAUSA VISUAL
+            lista.innerHTML = "<tr><td colspan='7'>Importando dados...</td></tr>";
+
             let total = 0;
 
-            for(let item of dadosImportados){
+            for(const item of dadosImportados){
 
-                // 🔥 ADAPTAÇÃO AUTOMÁTICA
                 const obj = {
                     statusColaborador: item.statusColaborador || "ATIVO",
                     nome: item.nome || "",
@@ -342,11 +349,11 @@ async function importarBackup(event){
                 total++;
             }
 
-            alert(`✅ ${total} registros importados com sucesso!`);
+            alert(`✅ ${total} colaboradores importados!`);
 
         }catch(err){
             console.error(err);
-            alert("Erro ao importar arquivo");
+            alert("Erro ao importar");
         }
     };
 
