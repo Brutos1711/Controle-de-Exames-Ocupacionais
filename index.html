@@ -236,10 +236,11 @@ async function deletar(i){
 function limpar(){
     status.value = "ATIVO";
     nome.value = "";
+    funcao.value = "";
     lab.value = "";
     aso.value = "";
 
-    editIndex = null; // 🔥 faltava isso
+    editIndex = null;
 
     btnSalvar.innerText = "Salvar";
 }
@@ -330,10 +331,11 @@ async function importarBackup(event){
                 return;
             }
 
-            // 🚨 PAUSA VISUAL
-            lista.innerHTML = "<tr><td colspan='7'>Importando dados...</td></tr>";
+            if(!confirm("Isso vai adicionar os dados no sistema. Continuar?")) return;
 
-            let total = 0;
+            lista.innerHTML = "<tr><td colspan='7'>Importando...</td></tr>";
+
+            let batch = [];
 
             for(const item of dadosImportados){
 
@@ -345,11 +347,12 @@ async function importarBackup(event){
                     aso: item.aso || ""
                 };
 
-                await addDoc(collection(db, "colaboradores"), obj);
-                total++;
+                batch.push(addDoc(collection(db, "colaboradores"), obj));
             }
 
-            alert(`✅ ${total} colaboradores importados!`);
+            await Promise.all(batch);
+
+            alert(`✅ ${dadosImportados.length} importados com sucesso!`);
 
         }catch(err){
             console.error(err);
@@ -359,14 +362,18 @@ async function importarBackup(event){
 
     reader.readAsText(file);
 }
-
+  
 function carregar(){
 
     onSnapshot(collection(db, "colaboradores"), (snapshot) => {
 
+        console.log("🔥 SNAPSHOT VEIO:", snapshot.size);
+
         dados = [];
 
         snapshot.forEach((docItem) => {
+            console.log("DOC:", docItem.id, docItem.data());
+
             dados.push({ id: docItem.id, ...docItem.data() });
         });
 
