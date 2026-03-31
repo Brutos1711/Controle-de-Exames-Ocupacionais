@@ -4,6 +4,43 @@
 <meta charset="UTF-8">
 <title>Controle de Exames v4.1</title>
 <script src="https://cdn.tailwindcss.com"></script>
+
+<script type="module">
+import { onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+import { 
+  getFirestore, 
+  collection, 
+  addDoc, 
+  getDocs, 
+  deleteDoc, 
+  doc,
+  updateDoc
+} from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+const firebaseConfig = {
+  apiKey: "AIzaSyBCH5v3Gwr88bpSruQ2Znd38wTy99PI7qo",
+  authDomain: "controle-exames.firebaseapp.com",
+  projectId: "controle-exames",
+  storageBucket: "controle-exames.firebasestorage.app",
+  messagingSenderId: "678414425625",
+  appId: "1:678414425625:web:1fb0f373d6791540d45488"
+};
+
+const app = initializeApp(firebaseConfig);
+const db = getFirestore(app);
+
+// 🔥 JOGAR PRO GLOBAL (ESSENCIAL)
+window.db = db;
+window.collection = collection;
+window.addDoc = addDoc;
+window.getDocs = getDocs;
+window.deleteDoc = deleteDoc;
+window.doc = doc;
+window.updateDoc = updateDoc;
+window.onSnapshot = onSnapshot;
+</script>
+
 </head>
 
 <body class="bg-gray-100 p-6">
@@ -65,7 +102,7 @@ Adicionar
 <input id="lab" type="date" class="border p-2 rounded">
 <input id="aso" type="date" class="border p-2 rounded">
 
-<button onclick="salvar()" class="bg-blue-600 text-white rounded p-2">
+<button id="btnSalvar" onclick="salvar()" class="bg-blue-600 text-white rounded p-2">
 Salvar
 </button>
 </div>
@@ -90,10 +127,19 @@ Salvar
 
 <script>
 
-let dados = JSON.parse(localStorage.getItem("colaboradores")) || [];
+let dados = [];
 let funcoes = JSON.parse(localStorage.getItem("funcoes")) || [];
 let editIndex = null;
 let filtroStatus = "";
+
+const status = document.getElementById("status");
+const nome = document.getElementById("nome");
+const funcao = document.getElementById("funcao");
+const lab = document.getElementById("lab");
+const aso = document.getElementById("aso");
+const busca = document.getElementById("busca");
+const lista = document.getElementById("lista");
+const btnSalvar = document.getElementById("btnSalvar");
 
 // STATUS FINAL
 function statusFinal(d){
@@ -126,43 +172,63 @@ function calc(data){
 }
 
 // SALVAR
-function salvar(){
-    const obj = {
-        statusColaborador: document.getElementById("status").value,
-        nome: document.getElementById("nome").value,
-        funcao: document.getElementById("funcao").value,
-        lab: document.getElementById("lab").value,
-        aso: document.getElementById("aso").value
-    };
+async function salvar(){
 
-    if(editIndex !== null){
-        dados[editIndex] = obj;
-        editIndex = null;
-    } else {
-        dados.push(obj);
+    if(!nome.value){
+        alert("Digite o nome");
+        return;
     }
 
-    localStorage.setItem("colaboradores", JSON.stringify(dados));
+    const obj = {
+        statusColaborador: status.value,
+        nome: nome.value,
+        funcao: funcao.value,
+        lab: lab.value,
+        aso: aso.value
+    };
+
+    // 🔥 EDITANDO
+    if(editIndex !== null){
+
+        if(!confirm("Deseja atualizar este registro?")) return;
+
+        let id = dados[editIndex].id;
+
+        await updateDoc(doc(db, "colaboradores", id), obj);
+
+        editIndex = null;
+
+    } else {
+        // 🔥 NOVO
+        await addDoc(collection(db, "colaboradores"), obj);
+    }
+
     limpar();
-    render();
 }
 // EDITAR
 function editar(i){
     let d = dados[i];
+
     status.value = d.statusColaborador;
     nome.value = d.nome;
     funcao.value = d.funcao;
     lab.value = d.lab;
     aso.value = d.aso;
+
     editIndex = i;
+
+    btnSalvar.innerText = "Atualizar"; // 🔥
 }
 
 // DELETAR
-function deletar(i){
+async function deletar(i){
+
     if(confirm("Excluir?")){
-        dados.splice(i,1);
-        localStorage.setItem("colaboradores", JSON.stringify(dados));
-        render();
+
+        let id = dados[i].id;
+
+        await deleteDoc(doc(db, "colaboradores", id));
+
     }
 }
 
@@ -172,6 +238,10 @@ function limpar(){
     nome.value = "";
     lab.value = "";
     aso.value = "";
+
+    editIndex = null; // 🔥 faltava isso
+
+    btnSalvar.innerText = "Salvar";
 }
 
 // FILTROS
@@ -191,7 +261,7 @@ function render(){
 
     let filtroNome = busca.value.toLowerCase();
 
-    lista.innerHTML = "";
+    let html = "";
 
     let ordenado = [...dados].sort((a,b)=>a.nome.localeCompare(b.nome));
 
@@ -202,9 +272,9 @@ function render(){
         let final = statusFinal(d);
         if(filtroStatus && final !== filtroStatus) return;
 
-        let iOriginal = dados.findIndex(x => x === d);
+        let iOriginal = dados.findIndex(x => x.id === d.id);
 
-        lista.innerHTML += `
+        html += `
         <tr class="border-b ${final==='VENCIDO'?'bg-red-50':''}">
         <td>${d.statusColaborador}</td>
         <td>${d.nome}</td>
@@ -218,6 +288,8 @@ function render(){
         </td>
         </tr>`;
     });
+
+    lista.innerHTML = html;
 
     validos.innerText = dados.filter(d=>statusFinal(d)==='VALIDO').length;
     proximos.innerText = dados.filter(d=>statusFinal(d)==='PROXIMO').length;
@@ -238,13 +310,13 @@ function exportarBackup(){
     URL.revokeObjectURL(url);
 }
 
-function importarBackup(event){
+async function importarBackup(event){
     const file = event.target.files[0];
     if(!file) return;
 
     const reader = new FileReader();
 
-    reader.onload = function(e){
+    reader.onload = async function(e){
         try{
             const dadosImportados = JSON.parse(e.target.result);
 
@@ -253,13 +325,12 @@ function importarBackup(event){
                 return;
             }
 
-            dados = dadosImportados;
+            for(let item of dadosImportados){
+                delete item.id; // evita conflito
+                await addDoc(collection(db, "colaboradores"), item);
+            }
 
-            localStorage.setItem("colaboradores", JSON.stringify(dados));
-
-            render();
-
-            alert("Backup restaurado com sucesso!");
+            alert("Backup enviado para o banco!");
 
         }catch(err){
             alert("Erro ao importar arquivo");
@@ -267,6 +338,21 @@ function importarBackup(event){
     };
 
     reader.readAsText(file);
+}
+
+function carregar(){
+
+    onSnapshot(collection(db, "colaboradores"), (snapshot) => {
+
+        dados = [];
+
+        snapshot.forEach((docItem) => {
+            dados.push({ id: docItem.id, ...docItem.data() });
+        });
+
+        render();
+    });
+
 }
 
 // FUNÇÕES
@@ -304,26 +390,11 @@ function formatarBR(data){
 }
 
 // INIT
-carregarFuncoes();
-render();
-
-</script>
-
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-app.js"></script>
-<script src="https://www.gstatic.com/firebasejs/8.10.1/firebase-firestore.js"></script>
-
-<script>
-const firebaseConfig = {
-  apiKey: "AIzaSyBCH5v3Gwr88bpSruQ2Znd38wTy99PI7qo",
-  authDomain: "controle-exames.firebaseapp.com",
-  projectId: "controle-exames",
-  storageBucket: "controle-exames.firebasestorage.app",
-  messagingSenderId: "678414425625",
-  appId: "1:678414425625:web:1fb0f373d6791540d45488"
+window.onload = () => {
+    carregarFuncoes();
+    carregar(); // 🔥 carrega do Firebase
 };
 
-firebase.initializeApp(firebaseConfig);
-const db = firebase.firestore();
 </script>
 
 </body>
